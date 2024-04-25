@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "pretty": true,
+    "preserveConstEnums": true,
+    "suppressImplicitAnyIndexErrors": false,
+    "noResolve": false,
+    "types": [
+      "node",
+    ],
+    "lib": ["es6"],
+    "sourceMap": true,
+    "target": "es6",
+  },
+  "ts-node": {
+    "swc": true
+  }
+}

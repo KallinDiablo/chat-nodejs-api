@@ -4,6 +4,7 @@ import bodyParser from "body-parser";
 import path from "path";
 import AppController from "./AppController";
 import { Server as SocketServer } from "socket.io";
+import loggingMiddleware from '../middlewares/loggingHandler';
 import {createServer, Server} from 'http'
 import cors from 'cors'
 import 'dotenv/config'
@@ -40,8 +41,9 @@ export default class handleControllerAndMiddleware {
     mongoose.connect(process.env.MONGODB_CONNECTION_STRING_LOCALHOST as string);
     this.app.use(bodyParser.urlencoded({ extended: false }));
     this.app.use(bodyParser.json());
-    this.app.use(cors)
+    this.app.use(cors())
     this.app.use("/static", express.static(path.join(__dirname, "../../public")));
+    this.app.use(loggingMiddleware)
     // this.app.use(this.exceptionHandler.NotFound404)
     // this.app.use(this.exceptionHandler.ErrorHandler)
   }

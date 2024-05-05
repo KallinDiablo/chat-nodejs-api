@@ -62,7 +62,7 @@ export default class UserController extends AppController {
       ],
       this.Register
     );
-    this.router.get(
+    this.router.post(
       `${this.pathAPI}/login`,
       [
         body("username").notEmpty().withMessage("Username is required"),
@@ -161,6 +161,17 @@ export default class UserController extends AppController {
         pNumber: req.body.pNumber,
         avatar: avatarDir,
       };
+      if (getValidator.isEmpty() === false) {
+        const listError: any[] = getValidator.errors.map((a:any)=>({path:a.path,message:a.msg})).filter((obj:any, index:any, self:any) => {
+          return self.findIndex((o:any) => o.path === obj.path) === index;
+        });
+        return res.status(200).json({
+          success: false,
+          code: res.statusCode,
+          type: "Validate Error",
+          message: listError,
+        });
+      }
       const mongoUnique: string[] = [];
       if (await CheckExist("username", req.body.username)) {
         mongoUnique.push("Username existed");
@@ -175,33 +186,18 @@ export default class UserController extends AppController {
         mongoUnique.push("Phone number existed");
       }
       if (mongoUnique.length === 0) {
-        switch (getValidator.isEmpty()) {
-          case true:
-            const result = await userModel.create(newUser);
-            return res.json({
-              success: true,
-              code: res.statusCode,
-              message: "Add new user",
-              data: result,
-            });
-          case false: {
-            const listError: any[] = [];
-            for (const error of getValidator.errors) {
-              listError.push({ message: error.msg });
-            }
-            return res.json({
-              success: false,
-              code: res.statusCode,
-              type: "Validate Error",
-              message: listError,
-            });
-          }
-        }
+        const result = await userModel.create(newUser);
+        return res.status(200).json({
+          success: true,
+          code: res.statusCode,
+          message: "Add new user",
+          data: result,
+        });
       } else {
         throw new MongooseError(mongoUnique.toString());
       }
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -213,7 +209,19 @@ export default class UserController extends AppController {
   //Log in
   private async LogIn(req: Request, res: Response) {
     try {
-      const getValidator: any = validationResult(req);
+      const getValidator: any = validationResult(req)
+
+      if (getValidator.isEmpty() === false) {
+        const listError: any[] = getValidator.errors.map((a:any)=>({path:a.path,message:a.msg})).filter((obj:any, index:any, self:any) => {
+          return self.findIndex((o:any) => o.path === obj.path) === index;
+        });
+        return res.status(200).json({
+          success: false,
+          code: res.statusCode,
+          type: "Validate Error",
+          message: listError,
+        });
+      }
       const newLogIn = {
         username: req.body.username,
         password: CryptoJS.PBKDF2(
@@ -227,36 +235,20 @@ export default class UserController extends AppController {
       };
       const data = await userModel.findOne(newLogIn);
       if (data === null) {
-        throw new HttpException(500, "Username or password wrong");
+        throw new HttpException(200, "Username or password wrong");
       }
       const result = jwt.sign({ data: data }, process.env.ACCESS_TOKEN_SECRET, {
         algorithm: "HS256",
         expiresIn: "2y",
       });
-      switch (getValidator.isEmpty()) {
-        case true: {
-          return res.json({
-            success: true,
-            code: res.statusCode,
-            message: "Login",
-            data: result,
-          });
-        }
-        case false: {
-          const listError: any[] = [];
-          for (const error of getValidator.errors) {
-            listError.push({ message: error.msg });
-          }
-          return res.json({
-            success: false,
-            code: res.statusCode,
-            type: "Validate Error",
-            message: listError,
-          });
-        }
-      }
+      return res.status(200).json({
+        success: true,
+        code: res.statusCode,
+        message: "Login",
+        data: result,
+      });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -269,7 +261,7 @@ export default class UserController extends AppController {
   private async PersonalProfile(req: any, res: Response) {
     try {
       const user = req.user;
-      return res.json({
+      return res.status(200).json({
         success: true,
         code: res.statusCode,
         message: "Get Personal profile",
@@ -281,7 +273,7 @@ export default class UserController extends AppController {
         },
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -298,12 +290,12 @@ export default class UserController extends AppController {
       };
       const data = await userModel.findOne(dataWaitingForGet);
       if (data === null) {
-        throw new HttpException(500, "User not found");
+        throw new HttpException(200, "User not found");
       }
       if (data._id == req.user.data._id) {
-        throw new HttpException(500, "Get profile error");
+        throw new HttpException(200, "Get profile error");
       }
-      return res.json({
+      return res.status(200).json({
         success: true,
         code: res.statusCode,
         message: "Get User profile",
@@ -315,7 +307,7 @@ export default class UserController extends AppController {
         },
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -334,14 +326,14 @@ export default class UserController extends AppController {
         { _id: user._id },
         { avatar: avatarDir }
       );
-      return res.json({
+      return res.status(200).json({
         success: true,
         code: res.statusCode,
         message: "Updated avatar",
         data: result,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -352,6 +344,7 @@ export default class UserController extends AppController {
   // Edit profile
   private async EditProfile(req: any, res: Response) {
     try {
+      const token = req.header("Authorization");
       const user = req.user.data;
       const data = {
         fullname: req.body.fullname ? req.body.fullname : user.fullname,
@@ -359,14 +352,16 @@ export default class UserController extends AppController {
         pNumber: req.body.pNumber ? req.body.pNumber : user.pNumber,
       };
       const result = await userModel.updateOne({ _id: user._id }, data);
-      return res.json({
+
+      const verify = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+      return res.status(200).json({
         success: true,
         code: res.statusCode,
         message: "Updated profile",
         data: result,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -392,11 +387,11 @@ export default class UserController extends AppController {
       };
       console.log(data);
       if (data.oldPassword != user.password) {
-        throw new HttpException(500, "Old password wrong");
+        throw new HttpException(200, "Old password wrong");
       }
       if (data.newRepassword != data.newPassword) {
         throw new HttpException(
-          500,
+          200,
           "Confirm new password and new password is different"
         );
       }
@@ -409,14 +404,14 @@ export default class UserController extends AppController {
         }
       ).toString(CryptoJS.enc.Base64);
       const result = await userModel.updateOne({ _id: user._id }, { password });
-      return res.json({
+      return res.status(200).json({
         success: true,
         code: res.statusCode,
         message: "Updated profile",
         data: result,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -427,9 +422,9 @@ export default class UserController extends AppController {
   // Add friend
   private async AddFriend(req: any, res: Response) {
     try {
-      const user = req.user.data
+      const user = req.user.data;
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,
@@ -441,7 +436,7 @@ export default class UserController extends AppController {
   private async RemoveFriend(req: any, res: Response) {
     try {
     } catch (error: any) {
-      return res.status(500).json({
+      return res.status(200).json({
         success: false,
         code: res.statusCode,
         type: error.name,

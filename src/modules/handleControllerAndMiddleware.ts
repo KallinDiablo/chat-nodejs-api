@@ -11,7 +11,7 @@ import 'dotenv/config'
 import Constraints from "../constraints/constraints";
 import AppRouter from "./AppRouter";
 import folderMiddleware from "../middlewares/folderHandler";
-
+import SocketMiddleware from "../middlewares/socketIOHandler";
 export default class handleControllerAndMiddleware {
   public app: express.Application;
   public port: Number;
@@ -23,13 +23,13 @@ export default class handleControllerAndMiddleware {
     this.app = express();
     this.port = port;
 
-    // this.http = createServer(this.app)
-    // this.io= new SocketServer(this.http,{
-    //   cors: {
-    //     origin: "*",
-    //     methods: ["GET", "POST"]
-    //   }
-    // })
+    this.http = createServer(this.app)
+    this.io= new SocketServer(this.http,{
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+      }
+    })
 
 
     this.initializeMiddlewares();
@@ -49,20 +49,11 @@ export default class handleControllerAndMiddleware {
     this.app.use("/static", express.static(path.join(__dirname, "../../public")));
     this.app.use(loggingMiddleware)
     this.app.use(folderMiddleware)
-
-    // this.io.use((socket: Socket, next) => {
-    //   console.log(`New connection: ${socket.id}`);
-    //   next();
-    // });
-    // this.io.on('connection', (socket: Socket) => {
-    //   console.log(`User connected: ${socket.id}`);
-    
-    //   // Handle custom events
-    //   socket.on('customEvent', (data) => {
-    //     console.log('Received custom event:', data);
-    //     // Add your logic here
-    //   });
-    // });
+    this.io.use((socket: Socket, next) => {
+      console.log(`New connection: ${socket.id}`);
+      next();
+    });
+    this.io.on("connection",SocketMiddleware)
   }
 
   public listen() {

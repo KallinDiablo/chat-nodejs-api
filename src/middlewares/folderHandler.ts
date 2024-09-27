@@ -22,7 +22,8 @@ const folderMiddleware = async (
     fs.mkdirSync(publicChatDir);
   }
   const avatarNameGetFromMongo = (await UserModel.find()).map((e) => e.avatar);
-  const ChatFolderGetFromMongo = (await ChatModel.find()).map((e) => e.chatId);
+  const ChatFolderGetFromMongo = (await ChatModel.find()).map((e) => (`${e.chatId}`));
+  const ChatImageGetFromMongo = (await ChatModel.find()).filter(e=>{return e.chatType=false}).map((e) => (`${e.chatImage}`));
   const FileNameGetFromMongo = (await MessageModel.find()).map((e) => ({
     chatId: e.chatId,
     message: e.message
@@ -40,15 +41,15 @@ const folderMiddleware = async (
     listAvatarFile,
     avatarNameGetFromMongo
   );
-  const notExistChatDir = getNotOnDbValues(listChatDir, ChatFolderGetFromMongo);
-  if (notExistChatDir) {
+  const notExistChatDir = getNotOnDbValues(listChatDir, ChatFolderGetFromMongo).map((e) => `/chats/${e}`);
+  if (notExistDbAvatar) {
     for (const item of notExistDbAvatar) {
       fs.unlinkSync(path.join(__dirname, "../../public", item));
     }
   }
   if (notExistChatDir) {
     for (const item of notExistChatDir) {
-      fs.rmSync(path.join(__dirname, "../../public", item));
+      fs.rmSync(path.join(__dirname, "../../public", item),{ recursive: true });
     }
   }
   if (FileNameGetFromMongo) {

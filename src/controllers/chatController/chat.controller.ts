@@ -3,11 +3,12 @@ import HttpException from "../../modules/HttpException";
 import mongoose from "mongoose";
 import fs from "fs";
 import multer from "multer";
-import ChatModel from "./chat.model";
 import MessageModel from "./message.model";
 import UserModel from "../userController/user.model";
 import path from "path";
 import CryptoJS from "crypto-js";
+import ChatModel from "./chat.model";
+import formidable from "formidable";
 
 export default class ChatController {
   public storageMessage = multer.diskStorage({
@@ -17,17 +18,15 @@ export default class ChatController {
     filename(req: any, file, callback) {
       callback(
         null,
-        `${
-          req.user.data._id
-        }_${
+        `${req.user.data._id}_${
           req.body.chatId
-        }_${
-          new mongoose.Types.ObjectId()
-        }${path.extname(file.originalname)}`.toLowerCase()
+        }_${new mongoose.Types.ObjectId()}${path.extname(
+          file.originalname
+        )}`.toLowerCase()
       );
     },
   });
-  public uploadMultiple = multer({
+  public upload = multer({
     storage: this.storageMessage,
   });
 
@@ -38,15 +37,58 @@ export default class ChatController {
     next: NextFunction
   ) => {
     try {
-      const user = req.user.data
+      const user = req.user.data;
       const paginate = {
         page: Number(req.query.page) || 0,
         pageSize: Number(req.query.size) || 20,
       };
-      const data = await ChatModel.find({members:user._id})
-        .sort({ updatedAt: 1 })
-        .skip(paginate.page * paginate.pageSize)
-        .limit(paginate.pageSize);
+      // const data = (await ChatModel
+      //   .find({ members: user._id })
+      //   .sort({ updatedAt: 1 })
+      //   .skip(paginate.page * paginate.pageSize)
+      //   .limit(paginate.pageSize)).map(
+      //     (e)=>({
+      //       members: e.members,
+      //       chatName: e.chatType?(async()=>{return (await UserModel.findById(GetNotAtSame(e.members,user._id)[0])).fullname}):e.chatName,
+      //       owner: e.owner,
+      //       chatId: e.chatId,
+      //       chatImage: e.chatType?(async()=>{return (await UserModel.findById(GetNotAtSame(e.members,user._id)[0])).avatar}):e.chatImage,
+      //       chatType: e.chatType
+      //     })
+      //   );
+      const data = await ChatModel.aggregate([
+        {
+          $lookup: {
+            from: "usermodels", // Name of the User collection
+            localField: "members", // Field in the Chat collection
+            foreignField: "_id", // Field in the User collection
+            as: "user",
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            chatType: 1,
+            members: 1,
+            owner: 1,
+            chatId: 1,
+            chatName: {
+              $cond: {
+                if: { $eq: ["$chatType", true] },
+                then: { $arrayElemAt: ["$user.fullname", 0] }, 
+                else: "$chatName", 
+              },
+            },
+            chatImage: {
+              $cond: {
+                if: { $eq: ["$chatType", true] },
+                then: { $arrayElemAt: ["$user.avatar", 0] },
+                else: "$chatImage", 
+              },
+            },
+          },
+        },
+      ]);
       const totalChats = await ChatModel.countDocuments();
       const totalPages =
         Math.floor(totalChats / paginate.pageSize) +
@@ -122,38 +164,23 @@ export default class ChatController {
     }
   };
 
-  //   Create new chat
-  public CreateNewChat = async (
+  //   Create new personal chat
+  public CreateNewPersonalChat = async (
     req: any,
     res: Response,
     next: NextFunction
   ) => {
     try {
       const user_creator = req.user.data;
-      if (hasDuplicates(req.body.users)) {
-        throw new HttpException(200, "has user duplicate");
+      const user_request = await UserModel.findById(req.body.user);
+      if (!user_request) {
+        throw new HttpException(200, "User not found");
       }
-      if (req.body.chatType && req.body.users.length > 1) {
-        throw new HttpException(200, "Something go wrong");
-      }
-      const list_users_id = [];
-      for (const user of req.body.users) {
-        const result = await UserModel.findOne({ pNumber: user });
-        if (!result) {
-          throw new HttpException(200, "Not found user");
-        }
-        if (result._id === user_creator._id) {
-          throw new HttpException(200, "member cannot be owner");
-        }
-        list_users_id.push(result._id);
-      }
-      if (req.body.chatType) {
-        list_users_id.push(user_creator._id);
-      }
-      const request = {
-        members: list_users_id,
-        chatName: req.body.chatName ? req.body.chatName : null,
-        owner: req.body.chatType ? list_users_id : [user_creator._id],
+      const request: any = {
+        chatImage: null,
+        chatName: null,
+        members: [user_creator._id, req.body.user],
+        owner: [user_creator._id, req.body.user],
         chatId: CryptoJS.PBKDF2(
           "Secret Passphrase",
           String(new mongoose.Types.ObjectId()),
@@ -162,27 +189,77 @@ export default class ChatController {
             iterations: 1000,
           }
         ).toString(CryptoJS.enc.Hex),
-        chatType: req.body.chatType,
+        chatType: true,
       };
-      const dir = path.join(__dirname, `../../../public/chats/${request.chatId}`);
-      if(!fs.existsSync(dir)){
-        if (req.body.chatType) {
-            const result = await ChatModel.findOne({ owner: request.owner });
-            if (result) {
-              throw new HttpException(200, "already have that chat");
-            } else {
-              fs.mkdirSync(dir);
-            }
-          } else {
-            fs.mkdirSync(dir);
-          }
+      if (
+        await ChatModel.findOne({ members: request.members, chatType: true })
+      ) {
+        throw new HttpException(200, "this chat already existed");
       }
-      
       const result = await ChatModel.create(request);
       return res.status(200).json({
         success: true,
         code: res.statusCode,
-        message: "Created new chat",
+        message: "Create new personalchat",
+        data: result,
+      });
+    } catch (error: any) {
+      return res.status(200).json({
+        success: false,
+        code: res.statusCode,
+        type: error.name,
+        message: error.message,
+      });
+    }
+  };
+
+  //  create new group chat
+  public CreateNewGroupChat = async (
+    req: any,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const extension = ["image/jpg", "image/jpeg", "image/png", "image/gif"];
+      if (!req.body.chatName) {
+        throw new HttpException(200, "Group name can not be null");
+      }
+      if (req.file && extension.includes(req.file.mimetype) === false) {
+        throw new HttpException(
+          200,
+          "Wrong file! Only accept JPEG, JPG, PNG and GIF"
+        );
+      }
+      const user_creator = req.user.data;
+      const request = {
+        members: user_creator._id,
+        chatName: req.body.chatName,
+        owner: user_creator._id,
+        chatId: CryptoJS.PBKDF2(
+          "Secret Passphrase",
+          String(new mongoose.Types.ObjectId()),
+          {
+            keySize: 512 / 32,
+            iterations: 1000,
+          }
+        ).toString(CryptoJS.enc.Hex),
+        chatImage: req.file ? `chats/${req.file.filename}` : "/group.jpg",
+        chatType: false,
+      };
+      const dir = path.join(
+        __dirname,
+        `../../../public/chats/${request.chatId}`
+      );
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir);
+      }
+
+      const result = await ChatModel.create(request);
+
+      return res.status(200).json({
+        success: true,
+        code: res.statusCode,
+        message: "Created new group chat",
         data: result,
       });
     } catch (error: any) {
@@ -203,30 +280,38 @@ export default class ChatController {
   ) => {
     try {
       const user_creator = req.user.data;
-        const files = req.files
-        if(!await UserModel.findById(user_creator._id)){
-            throw new HttpException(200,'Not found user')
-        }
-        if(!await ChatModel.findOne({chatId:req.body.chatId})){
-            throw new HttpException(200,'Not found chat channel')
-        }
-        const messages = []
-        for(const item of files){
-            messages.push({messageImage:true,value:`/chats/${item.filename}`})
-        }
-        messages.push({messageImage:false,value:req.body.message?req.body.message:null})
-        const request = {
-            message:messages,
-            ownerId:user_creator._id,
-            chatId:req.body.chatId
-        }
-        const result = await MessageModel.create(request)
-        return res.status(200).json({
-            success: true,
-            code: res.statusCode,
-            message: "Created new message",
-            data: result,
-          });
+      const files = req.files;
+      if (!(await UserModel.findById(user_creator._id))) {
+        throw new HttpException(200, "Not found user");
+      }
+      if (!(await ChatModel.findOne({ chatId: req.body.chatId }))) {
+        throw new HttpException(200, "Not found chat channel");
+      }
+      const messages = [];
+      for (const item of files) {
+        messages.push({ messageImage: true, value: `/chats/${item.filename}` });
+      }
+      messages.push({
+        messageImage: false,
+        value: req.body.message ? req.body.message : null,
+      });
+      const request = {
+        message: messages,
+        ownerId: user_creator._id,
+        chatId: req.body.chatId,
+      };
+      const result = await MessageModel.create(request);
+
+      const chat = await ChatModel.updateOne(
+        { chatId: req.body.chatId },
+        { updatedAt: Date.now() }
+      );
+      return res.status(200).json({
+        success: true,
+        code: res.statusCode,
+        message: "Created new message",
+        data: result,
+      });
     } catch (error: any) {
       return res.status(200).json({
         success: false,
@@ -244,4 +329,7 @@ const hasDuplicates = (array: any[]): boolean => {
     }
   }
   return false;
+};
+const GetNotAtSame = (array1: any[], array2: any[]): any[] => {
+  return array1.filter((value) => !array2.includes(value));
 };

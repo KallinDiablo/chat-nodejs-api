@@ -106,5 +106,10 @@ export default class UserRoutes extends AppRouter {
       AuthProvider.requireAuth(),
       this.userController.ChangePassword
     );
+    this.router.get(
+      `${this.pathAPI}/searchUser`,
+      AuthProvider.requireAuth(),
+      this.userController.SearchUsers
+    );
   }
 }

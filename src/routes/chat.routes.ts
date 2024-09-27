@@ -16,14 +16,20 @@ export default class ChatRoutes extends AppRouter{
   }
   public intializeRoutes(){
     this.router.post(
-        `${this.pathAPI}/createNewChat`,
+        `${this.pathAPI}/createNewPersonalChat`,
         AuthProvider.requireAuth(),
-        this.chatController.CreateNewChat
+        this.chatController.CreateNewPersonalChat
     )
+    this.router.post(
+      `${this.pathAPI}/createNewGroupChat`,
+      AuthProvider.requireAuth(),
+      this.chatController.upload.single('file'),
+      this.chatController.CreateNewGroupChat
+  )
     this.router.post(
         `${this.pathAPI}/createNewMessage`,
         AuthProvider.requireAuth(),
-        this.chatController.uploadMultiple.array('files'),
+        this.chatController.upload.array('files'),
         this.chatController.CreateNewMessage
     )
     this.router.get(

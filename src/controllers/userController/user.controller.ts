@@ -18,8 +18,8 @@ export default class UserController {
         null,
         `${
           req.body.username !== undefined
-          ? req.body.username
-          : req.user.data.username
+            ? req.body.username
+            : req.user.data.username
         }_${
           req.body.email !== undefined ? req.body.email : req.user.data.email
         }_${
@@ -33,7 +33,7 @@ export default class UserController {
   public upload = multer({
     storage: this.storageAvatar,
   });
-  
+
   // Register
   public Register = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -469,6 +469,43 @@ export default class UserController {
       });
     }
   }
+  // Search user
+  public SearchUsers = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const search = String(req.query.searchQuery);
+      const user_search = req.user.data;
+      const result = (
+        await userModel
+          .find({_id:{$nin:user_search._id}})
+          .or([
+            { pNumber: { $regex: search, $options: "i" } },
+            { fullname: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+          ]).sort({ fullname:1 }).skip(req.query.page * 15)
+          .limit(15)
+      )
+      const data = result.map((e) => ({
+        _id: e._id,
+        fullname: e.fullname,
+        email: e.email,
+        pNumber: e.pNumber,
+        avatar: e.avatar,
+      }));
+      return res.status(200).json({
+        success: true,
+        code: res.statusCode,
+        message: "Search",
+        data: data,
+      });
+    } catch (error: any) {
+      return res.status(200).json({
+        success: false,
+        code: res.statusCode,
+        type: error.name,
+        message: error.message,
+      });
+    }
+  };
 }
 const CheckExist = async (position: string, object: any) => {
   const store: any = {};
